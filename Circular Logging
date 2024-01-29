@@ -1,83 +1,105 @@
 #include <iostream>
 #include <fstream>
-#include <ctime>
 #include <iomanip>
+#include <ctime>
 #include <chrono>
 #include <thread>
-#include <json/json.h>  // Bu kütüphaneyi kullanabilmek için gerekli olan JsonCpp'yi eklemeyi unutmayın.
+#include <json/json.h>
 
-class CircularLogger {
+// Loglama sınıfı
+class GuzelLoglayici {
 public:
-    CircularLogger(const std::string& configPath) {
-        loadConfig(configPath);
-        createLogFile();
+    GuzelLoglayici(const std::string& ayarDosyasi) {
+        AyarlariOku(ayarDosyasi);
+        LogDosyasiOlustur();
     }
 
-    ~CircularLogger() {
-        if (logFile.is_open()) {
-            logFile.close();
+    ~GuzelLoglayici() {
+        if (logDosyasi.is_open()) {
+            logDosyasi.close();
         }
     }
 
-    void log(const std::string& message) {
-        rotateLogFileIfNeeded();
-        logFile << getCurrentTimestamp() << " " << message << std::endl;
+    void GuzelLogEkle(const std::string& mesaj) {
+        LogDosyasiRotasyonunuKontrolEt();
+        logDosyasi << SuankiZamaniGetir() << " " << mesaj << std::endl;
     }
 
 private:
-    int maxLogFileCount;
-    int logRotationIntervalDays;
-    std::string logFilePath;
-    std::ofstream logFile;
+    int maksLogDosyaSayisi;
+    int logRotasyonSuresiGun;
+    std::string logDosyaYolu;
+    std::ofstream logDosyasi;
 
-    void loadConfig(const std::string& configPath) {
-        std::ifstream configFile(configPath);
-        Json::Value root;
-        configFile >> root;
+    void AyarlariOku(const std::string& ayarDosyasi) {
+        std::ifstream configDosyasi(ayarDosyasi);
+        Json::Value ayarlar;
+        configDosyasi >> ayarlar;
 
-        maxLogFileCount = root["maxLogFileCount"].asInt();
-        logRotationIntervalDays = root["logRotationIntervalDays"].asInt();
-        logFilePath = root["logFilePath"].asString();
+        maksLogDosyaSayisi = ayarlar["maksLogDosyaSayisi"].asInt();
+        logRotasyonSuresiGun = ayarlar["logRotasyonSuresiGun"].asInt();
+        logDosyaYolu = ayarlar["logDosyaYolu"].asString();
         
-        configFile.close();
+        configDosyasi.close();
     }
 
-    void createLogFile() {
-        logFile.open(generateLogFileName(), std::ios::app);
+    void LogDosyaOlustur() {
+        logDosyasi.open(LogDosyaAdiniOlustur(), std::ios::app);
     }
 
-    std::string generateLogFileName() {
-        auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    std::string LogDosyaAdiniOlustur() {
+        auto simdikiZaman = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
         std::stringstream ss;
-        ss << std::put_time(std::gmtime(&now), "%Y-%m-%d_%H-%M-%S") << ".log";
-        return logFilePath + "/" + ss.str();
+        ss << std::put_time(std::gmtime(&simdikiZaman), "%Y-%m-%d_%H-%M-%S") << ".log";
+        return logDosyaYolu + "/" + ss.str();
     }
 
-    std::string getCurrentTimestamp() {
-        auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    std::string SuankiZamaniGetir() {
+        auto simdikiZaman = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
         std::stringstream ss;
-        ss << std::put_time(std::gmtime(&now), "%Y-%m-%d %H:%M:%S");
+        ss << std::put_time(std::gmtime(&simdikiZaman), "%Y-%m-%d %H:%M:%S");
         return ss.str();
     }
 
-    void rotateLogFileIfNeeded() {
-        auto now = std::chrono::system_clock::now();
-        auto lastRotationTime = std::chrono::system_clock::from_time_t(std::chrono::system_clock::to_time_t(now) - logRotationIntervalDays * 24 * 60 * 60);
+    void LogDosyasiRotasyonunuKontrolEt() {
+        auto simdikiZaman = std::chrono::system_clock::now();
+        auto sonRotasyonZamani = std::chrono::system_clock::from_time_t(std::chrono::system_clock::to_time_t(simdikiZaman) - logRotasyonSuresiGun * 24 * 60 * 60);
         
-        if (now >= lastRotationTime) {
-            logFile.close();
-            std::remove(logFilePath.c_str());
-            createLogFile();
+        if (simdikiZaman >= sonRotasyonZamani) {
+            logDosyasi.close();
+            LogDosyaRotasyonunuYap();
+            LogDosyaOlustur();
         }
+    }
+
+    void LogDosyaRotasyonunuYap() {
+        std::vector<std::string> logDosyaListesi;
+        for (int i = 1; i <= maksLogDosyaSayisi; ++i) {
+            std::string dosyaAdi = logDosyaYolu + "/" + GunIcinLogDosyaAdiniGetir(i);
+            logDosyaListesi.push_back(dosyaAdi);
+        }
+
+        std::remove(logDosyaListesi.back().c_str());
+        for (int i = maksLogDosyaSayisi - 1; i >= 1; --i) {
+            std::rename(logDosyaListesi[i - 1].c_str(), logDosyaListesi[i].c_str());
+        }
+    }
+
+    std::string GunIcinLogDosyaAdiniGetir(int gunOffset) {
+        auto simdikiZaman = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+        auto gunZamani = std::chrono::system_clock::to_time_t(simdikiZaman - gunOffset * 24 * 60 * 60);
+        std::stringstream ss;
+        ss << std::put_time(std::gmtime(&gunZamani), "%Y-%m-%d") << ".log";
+        return ss.str();
     }
 };
 
 int main() {
-    CircularLogger logger("config.json");
+    GuzelLoglayici guzelLoglayici("guzel_loglama_ayarlar.json");
 
     for (int i = 0; i < 10; ++i) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
-        logger.log("Log message #" + std::to_string(i));
+        guzelLoglayici.GuzelLogEkle("Guzel log mesaji #" + std::to_string(i));
     }
 
     return 0;

@@ -1,0 +1,84 @@
+#include <iostream>
+#include <fstream>
+#include <ctime>
+#include <iomanip>
+#include <chrono>
+#include <thread>
+#include <json/json.h>  // Bu kütüphaneyi kullanabilmek için gerekli olan JsonCpp'yi eklemeyi unutmayın.
+
+class CircularLogger {
+public:
+    CircularLogger(const std::string& configPath) {
+        loadConfig(configPath);
+        createLogFile();
+    }
+
+    ~CircularLogger() {
+        if (logFile.is_open()) {
+            logFile.close();
+        }
+    }
+
+    void log(const std::string& message) {
+        rotateLogFileIfNeeded();
+        logFile << getCurrentTimestamp() << " " << message << std::endl;
+    }
+
+private:
+    int maxLogFileCount;
+    int logRotationIntervalDays;
+    std::string logFilePath;
+    std::ofstream logFile;
+
+    void loadConfig(const std::string& configPath) {
+        std::ifstream configFile(configPath);
+        Json::Value root;
+        configFile >> root;
+
+        maxLogFileCount = root["maxLogFileCount"].asInt();
+        logRotationIntervalDays = root["logRotationIntervalDays"].asInt();
+        logFilePath = root["logFilePath"].asString();
+        
+        configFile.close();
+    }
+
+    void createLogFile() {
+        logFile.open(generateLogFileName(), std::ios::app);
+    }
+
+    std::string generateLogFileName() {
+        auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+        std::stringstream ss;
+        ss << std::put_time(std::gmtime(&now), "%Y-%m-%d_%H-%M-%S") << ".log";
+        return logFilePath + "/" + ss.str();
+    }
+
+    std::string getCurrentTimestamp() {
+        auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+        std::stringstream ss;
+        ss << std::put_time(std::gmtime(&now), "%Y-%m-%d %H:%M:%S");
+        return ss.str();
+    }
+
+    void rotateLogFileIfNeeded() {
+        auto now = std::chrono::system_clock::now();
+        auto lastRotationTime = std::chrono::system_clock::from_time_t(std::chrono::system_clock::to_time_t(now) - logRotationIntervalDays * 24 * 60 * 60);
+        
+        if (now >= lastRotationTime) {
+            logFile.close();
+            std::remove(logFilePath.c_str());
+            createLogFile();
+        }
+    }
+};
+
+int main() {
+    CircularLogger logger("config.json");
+
+    for (int i = 0; i < 10; ++i) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        logger.log("Log message #" + std::to_string(i));
+    }
+
+    return 0;
+}
